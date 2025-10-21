@@ -1,0 +1,228 @@
+const movies = [
+  { flip: "Die Luftmatratze", answer: "Das Boot" },
+  { flip: "Der Aufstieg", answer: "Der Untergang" },
+  { flip: "Cold", answer: "Heat" },
+  { flip: "Segen der Ostsee", answer: "Fluch der Karibik" },
+  { flip: "White Groom", answer: "Black Widow" }
+];
+
+const qwertzLayout = [
+  [..."QWERTZUIOPÜ"],
+  [..."ASDFGHJKLÖÄ"],
+  [..."YXCVBNM", " ", " ", " ", " "] // filler keys for alignment
+];
+
+let currentMovieIndex = 0;
+let currentLetterIndex = 0;
+let isCompleted = false;
+let lives = 5;
+let outOfLives = false;
+let inputLocked = false;
+
+document.addEventListener("DOMContentLoaded", () => {
+  createKeyboard();
+  createHearts();
+  loadMovie(currentMovieIndex);
+
+  document.addEventListener("keydown", handleKeyPress);
+  document.getElementById("nextButton").addEventListener("click", nextMovie);
+  document
+    .getElementById("restartButton")
+    .addEventListener("click", restartGame);
+});
+
+function heartSVG() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5
+               2 5.42 4.42 3 7.5 3
+               c1.74 0 3.41.81 4.5 2.09
+               C13.09 3.81 14.76 3 16.5 3
+               19.58 3 22 5.42 22 8.5
+               c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+    </svg>`;
+}
+
+/* --- Game setup --- */
+function createHearts() {
+  const heartsDiv = document.getElementById("hearts");
+  heartsDiv.innerHTML = "";
+  for (let i = 0; i < 5; i++) {
+    const span = document.createElement("span");
+    span.className = "heart";
+    span.innerHTML = heartSVG();
+    heartsDiv.appendChild(span);
+  }
+}
+
+function loseHeart() {
+  if (lives <= 0 || outOfLives) return;
+  const hearts = document.querySelectorAll(".heart");
+  const index = 5 - lives;
+  if (hearts[index]) hearts[index].classList.add("lost");
+  lives--;
+
+  if (lives === 0) {
+    outOfLives = true;
+    revealXasLoss();
+  }
+}
+
+/* --- Red X reveal animation on loss --- */
+function revealXasLoss() {
+  const cells = document.querySelectorAll(".letter-cell");
+  let delay = 0;
+  for (let i = currentLetterIndex; i < cells.length; i++) {
+    const cell = cells[i];
+    if (!cell.textContent) {
+      setTimeout(() => {
+        cell.textContent = "X";
+        cell.classList.add("revealed-red");
+      }, delay);
+      delay += 100;
+    }
+  }
+  setTimeout(() => {
+    document.getElementById("nextButton").classList.add("show");
+  }, delay + 200);
+}
+
+/* --- Keyboard creation --- */
+function createKeyboard() {
+  const kb = document.getElementById("keyboard");
+  kb.innerHTML = "";
+  qwertzLayout.forEach((row) => {
+    const rowDiv = document.createElement("div");
+    rowDiv.className = "keyboard-row";
+    row.forEach((letter) => {
+      const key = document.createElement("div");
+      key.className = "key";
+      if (letter === " ") key.classList.add("invisible");
+      key.textContent = letter.trim();
+      key.addEventListener("click", () => {
+        if (letter === " ") return;
+        key.classList.add("pressed");
+        setTimeout(() => key.classList.remove("pressed"), 150);
+        handleKeyPress({ key: letter });
+      });
+      rowDiv.appendChild(key);
+    });
+    kb.appendChild(rowDiv);
+  });
+}
+
+/* --- Load a movie --- */
+function loadMovie(index) {
+  const movie = movies[index];
+  document.getElementById("flipWord").textContent = movie.flip.toUpperCase();
+  document.getElementById("roundInfo").textContent = `${index + 1}/${
+    movies.length
+  }`;
+  document.getElementById("nextButton").classList.remove("show");
+
+  currentLetterIndex = 0;
+  isCompleted = false;
+  lives = 5;
+  outOfLives = false;
+  inputLocked = false;
+  createHearts();
+  createAnswerCells(movie.answer);
+}
+
+/* --- Answer cells --- */
+function createAnswerCells(answer) {
+  const container = document.getElementById("answerContainer");
+  container.innerHTML = "";
+  const words = answer.split(" ");
+  let cellCount = 0;
+  words.forEach((word) => {
+    const group = document.createElement("div");
+    group.className = "word-group";
+    for (const ch of word) {
+      const cell = document.createElement("div");
+      cell.className = "letter-cell";
+      if (cellCount < 5) cell.classList.add("first-five");
+      cell.dataset.letter = ch.toUpperCase();
+      group.appendChild(cell);
+      cellCount++;
+    }
+    container.appendChild(group);
+  });
+}
+
+/* --- Key input --- */
+function normalizeKey(k) {
+  const map = { ä: "Ä", ö: "Ö", ü: "Ü" };
+  return map[k] || k.toUpperCase();
+}
+
+function handleKeyPress(event) {
+  if (isCompleted || outOfLives || inputLocked) return;
+  const k = normalizeKey(event.key);
+  if (k.length === 1 && /[A-ZÄÖÜ]/.test(k)) checkLetter(k);
+}
+
+/* --- Letter checking --- */
+function checkLetter(letter) {
+  const cells = document.querySelectorAll(".letter-cell");
+  if (currentLetterIndex >= cells.length) return;
+
+  const cell = cells[currentLetterIndex];
+  const correct = cell.dataset.letter;
+  cell.textContent = letter;
+
+  if (letter === correct) {
+    cell.classList.remove("incorrect");
+    cell.classList.add("correct");
+    currentLetterIndex++;
+
+    if (currentLetterIndex === 5 && cells.length > 5) {
+      for (let i = currentLetterIndex; i < cells.length; i++) {
+        setTimeout(() => {
+          cells[i].textContent = cells[i].dataset.letter;
+          cells[i].classList.add("revealed");
+        }, (i - currentLetterIndex) * 100);
+      }
+      setTimeout(
+        completeMovie,
+        (cells.length - currentLetterIndex) * 100 + 300
+      );
+    } else if (currentLetterIndex === cells.length) completeMovie();
+  } else {
+    inputLocked = true;
+    cell.classList.add("incorrect");
+    loseHeart();
+    setTimeout(() => {
+      if (outOfLives) return;
+      for (let i = currentLetterIndex; i < cells.length; i++) {
+        cells[i].textContent = "";
+        cells[i].classList.remove("correct", "incorrect", "revealed");
+      }
+      inputLocked = false;
+    }, 500);
+  }
+}
+
+/* --- End of round --- */
+function completeMovie() {
+  isCompleted = true;
+  document.getElementById("nextButton").classList.add("show");
+}
+
+function nextMovie() {
+  currentMovieIndex++;
+  if (currentMovieIndex >= movies.length) showGameOver();
+  else loadMovie(currentMovieIndex);
+}
+
+function showGameOver() {
+  document.getElementById("gameArea").style.display = "none";
+  document.getElementById("gameOver").classList.add("show");
+}
+
+function restartGame() {
+  currentMovieIndex = 0;
+  document.getElementById("gameArea").style.display = "block";
+  document.getElementById("gameOver").classList.remove("show");
+  loadMovie(0);
+}
