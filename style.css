@@ -9,7 +9,7 @@ const movies = [
 const qwertzLayout = [
   [..."QWERTZUIOPÜ"],
   [..."ASDFGHJKLÖÄ"],
-  [..."YXCVBNM", " ", " ", " ", " "] // filler keys for alignment
+  [..."YXCVBNM", "🎭", "ℹ️", "📜", "🔠"]
 ];
 
 let currentMovieIndex = 0;
@@ -87,7 +87,6 @@ function revealXasLoss() {
   }, delay + 200);
 }
 
-/* --- Keyboard creation --- */
 function createKeyboard() {
   const kb = document.getElementById("keyboard");
   kb.innerHTML = "";
@@ -97,14 +96,32 @@ function createKeyboard() {
     row.forEach((letter) => {
       const key = document.createElement("div");
       key.className = "key";
-      if (letter === " ") key.classList.add("invisible");
-      key.textContent = letter.trim();
-      key.addEventListener("click", () => {
-        if (letter === " ") return;
-        key.classList.add("pressed");
-        setTimeout(() => key.classList.remove("pressed"), 150);
-        handleKeyPress({ key: letter });
-      });
+
+      // --- Emoji hint keys ---
+      const hintEmojis = ["🎭", "ℹ️", "📜", "🔠"];
+      if (hintEmojis.includes(letter)) {
+        key.classList.add("hint-key");
+        const span = document.createElement("span");
+        span.textContent = letter;
+        key.appendChild(span);
+        key.addEventListener("click", () =>
+          handleHint(hintEmojis.indexOf(letter))
+        );
+      }
+
+      
+      // --- Normal letter keys ---
+      else {
+        if (letter === " ") key.classList.add("invisible");
+        key.textContent = letter.trim();
+        key.addEventListener("click", () => {
+          if (letter === " ") return;
+          key.classList.add("pressed");
+          setTimeout(() => key.classList.remove("pressed"), 150);
+          handleKeyPress({ key: letter });
+        });
+      }
+
       rowDiv.appendChild(key);
     });
     kb.appendChild(rowDiv);
@@ -178,10 +195,24 @@ function handleKeyPress(event) {
   if (k.length === 1 && /[A-ZÄÖÜ]/.test(k)) checkLetter(k);
 }
 
-/* --- Letter checking --- */
 function checkLetter(letter) {
   const cells = document.querySelectorAll(".letter-cell:not(.hyphen-cell)");
-  if (currentLetterIndex >= cells.length) return;
+  if (cells.length === 0) return;
+
+  // ➜ Neue Logik: Falls aktueller Index bereits "correct" oder "revealed", weitergehen
+  while (
+    currentLetterIndex < cells.length &&
+    (cells[currentLetterIndex].classList.contains("correct") ||
+      cells[currentLetterIndex].classList.contains("revealed"))
+  ) {
+    currentLetterIndex++;
+  }
+
+  // Wenn alle Buchstaben schon aufgedeckt sind
+  if (currentLetterIndex >= cells.length) {
+    completeMovie();
+    return;
+  }
 
   const cell = cells[currentLetterIndex];
   const correct = cell.dataset.letter;
@@ -251,3 +282,101 @@ window.addEventListener("resize", () => {
     createAnswerCells(movie.answer);
   }
 });
+
+/* --- Hint handling --- */
+function handleHint(index) {
+  if (outOfLives || inputLocked) return;
+
+  // Wenn kein Leben mehr, keine Hints möglich
+  if (lives <= 0) return;
+
+  // Herz verlieren
+  loseHeart();
+
+  // Wenn jetzt nur noch 1 Herz übrig ist, alle Hints deaktivieren
+  if (lives === 1) {
+    disableAllHints();
+  }
+
+  // Logik je nach Hint-Taste
+  switch (index) {
+    case 0:
+      showHintMessage(
+        "🎭 Hinweis 1: Denk an den ursprünglichen Film – sein Gegenteil könnte witzig sein!"
+      );
+      break;
+    case 1:
+      showHintMessage(
+        "ℹ️ Hinweis 2: Vielleicht hilft dir der Anfangsbuchstabe des Films?"
+      );
+      break;
+    case 2:
+      showHintMessage(
+        "📜 Hinweis 3: Lies den Flip-Titel – er verrät oft das Gegenteil vom echten!"
+      );
+      break;
+    case 3:
+      revealThreeLetters();
+      break;
+  }
+}
+
+/* --- Nachricht anzeigen --- */
+function showHintMessage(text) {
+  alert(text); // Du kannst das später durch eine hübsche Overlay-Nachricht ersetzen
+}
+
+/* --- Deaktiviert alle Hint-Tasten --- */
+function disableAllHints() {
+  const hintKeys = document.querySelectorAll(".hint-key");
+  hintKeys.forEach((key) => {
+    key.classList.add("disabled");
+    key.removeEventListener("click", handleHint);
+    key.style.pointerEvents = "none";
+    key.style.opacity = "0.5";
+  });
+}
+
+/* --- Deaktiviert nur die vierte Hint-Taste --- */
+function disableFourthHint() {
+  const hintKeys = document.querySelectorAll(".hint-key");
+  if (hintKeys[3]) {
+    hintKeys[3].classList.add("disabled");
+    hintKeys[3].style.pointerEvents = "none";
+    hintKeys[3].style.opacity = "0.5";
+  }
+}
+
+/* --- Deckt drei zufällige noch nicht aufgedeckte Buchstaben auf --- */
+function revealThreeLetters() {
+  const cells = Array.from(document.querySelectorAll(".letter-cell")).filter(
+    (c) =>
+      !c.classList.contains("correct") &&
+      !c.textContent &&
+      !c.classList.contains("space-cell")
+  );
+
+  if (cells.length === 0) {
+    disableFourthHint();
+    return;
+  }
+
+  const toReveal = Math.min(3, cells.length);
+  const randomCells = [];
+
+  while (randomCells.length < toReveal) {
+    const r = Math.floor(Math.random() * cells.length);
+    const cell = cells.splice(r, 1)[0];
+    randomCells.push(cell);
+  }
+
+  randomCells.forEach((cell) => {
+    cell.textContent = cell.dataset.letter;
+    cell.classList.add("correct");
+  });
+
+  // Wenn weniger als 3 aufgedeckt wurden, Taste deaktivieren
+  if (toReveal < 3) {
+    disableFourthHint();
+  }
+}
