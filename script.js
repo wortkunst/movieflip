@@ -1,15 +1,15 @@
 const movies = [
-  { flip: "Die Luftmatratze", answer: "Das Boot" },
-  { flip: "Der Aufstieg", answer: "Der Untergang" },
+  { flip: "Der Aufstieg", answer: "Der Untergehen des Untergehenden" },
   { flip: "Cold", answer: "Heat" },
   { flip: "Segen der Ostsee", answer: "Fluch der Karibik" },
-  { flip: "White Groom", answer: "Black Widow" }
+  { flip: "White Groom", answer: "Black Widow" },
+  { flip: "Short", answer: "Extraordinary" }
 ];
 
 const qwertzLayout = [
   [..."QWERTZUIOPÜ"],
   [..."ASDFGHJKLÖÄ"],
-  [..."YXCVBNM", " ", " ", " ", " "] // filler keys for alignment
+  [..."YXCVBNM", "🎭", "ℹ️", "📜", "🔠"]
 ];
 
 let currentMovieIndex = 0;
@@ -33,14 +33,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function heartSVG() {
   return `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5
-               2 5.42 4.42 3 7.5 3
-               c1.74 0 3.41.81 4.5 2.09
-               C13.09 3.81 14.76 3 16.5 3
-               19.58 3 22 5.42 22 8.5
-               c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-    </svg>`;
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5
+                 2 5.42 4.42 3 7.5 3
+                 c1.74 0 3.41.81 4.5 2.09
+                 C13.09 3.81 14.76 3 16.5 3
+                 19.58 3 22 5.42 22 8.5
+                 c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+      </svg>`;
 }
 
 /* --- Game setup --- */
@@ -70,7 +70,7 @@ function loseHeart() {
 
 /* --- Red X reveal animation on loss --- */
 function revealXasLoss() {
-  const cells = document.querySelectorAll(".letter-cell");
+  const cells = document.querySelectorAll(".letter-cell:not(.hyphen-cell)");
   let delay = 0;
   for (let i = currentLetterIndex; i < cells.length; i++) {
     const cell = cells[i];
@@ -87,7 +87,6 @@ function revealXasLoss() {
   }, delay + 200);
 }
 
-/* --- Keyboard creation --- */
 function createKeyboard() {
   const kb = document.getElementById("keyboard");
   kb.innerHTML = "";
@@ -97,14 +96,32 @@ function createKeyboard() {
     row.forEach((letter) => {
       const key = document.createElement("div");
       key.className = "key";
-      if (letter === " ") key.classList.add("invisible");
-      key.textContent = letter.trim();
-      key.addEventListener("click", () => {
-        if (letter === " ") return;
-        key.classList.add("pressed");
-        setTimeout(() => key.classList.remove("pressed"), 150);
-        handleKeyPress({ key: letter });
-      });
+
+      // --- Emoji hint keys ---
+      const hintEmojis = ["🎭", "ℹ️", "📜", "🔠"];
+      if (hintEmojis.includes(letter)) {
+        key.classList.add("hint-key");
+        const span = document.createElement("span");
+        span.textContent = letter;
+        key.appendChild(span);
+        key.addEventListener("click", () =>
+          handleHint(hintEmojis.indexOf(letter))
+        );
+      }
+
+      
+      // --- Normal letter keys ---
+      else {
+        if (letter === " ") key.classList.add("invisible");
+        key.textContent = letter.trim();
+        key.addEventListener("click", () => {
+          if (letter === " ") return;
+          key.classList.add("pressed");
+          setTimeout(() => key.classList.remove("pressed"), 150);
+          handleKeyPress({ key: letter });
+        });
+      }
+
       rowDiv.appendChild(key);
     });
     kb.appendChild(rowDiv);
@@ -129,25 +146,41 @@ function loadMovie(index) {
   createAnswerCells(movie.answer);
 }
 
-/* --- Answer cells --- */
+/* --- Natural width answer cells --- */
 function createAnswerCells(answer) {
   const container = document.getElementById("answerContainer");
   container.innerHTML = "";
-  const words = answer.split(" ");
+
+  // Create flex container that fits to display width
+  const flexContainer = document.createElement("div");
+  flexContainer.className = "solution-flex";
+  flexContainer.style.display = "flex";
+  flexContainer.style.flexWrap = "wrap";
+  flexContainer.style.gap = "6px";
+  flexContainer.style.justifyContent = "flex-start";
+
+  // Process the answer character by character
   let cellCount = 0;
-  words.forEach((word) => {
-    const group = document.createElement("div");
-    group.className = "word-group";
-    for (const ch of word) {
+  for (let i = 0; i < answer.length; i++) {
+    const char = answer[i];
+
+    if (char === " ") {
+      // Add spacing cell (not a playable letter)
+      const spaceCell = document.createElement("div");
+      spaceCell.className = "space-cell";
+      flexContainer.appendChild(spaceCell);
+    } else {
+      // Add letter cell
       const cell = document.createElement("div");
       cell.className = "letter-cell";
       if (cellCount < 5) cell.classList.add("first-five");
-      cell.dataset.letter = ch.toUpperCase();
-      group.appendChild(cell);
+      cell.dataset.letter = char.toUpperCase();
+      flexContainer.appendChild(cell);
       cellCount++;
     }
-    container.appendChild(group);
-  });
+  }
+
+  container.appendChild(flexContainer);
 }
 
 /* --- Key input --- */
@@ -162,10 +195,24 @@ function handleKeyPress(event) {
   if (k.length === 1 && /[A-ZÄÖÜ]/.test(k)) checkLetter(k);
 }
 
-/* --- Letter checking --- */
 function checkLetter(letter) {
-  const cells = document.querySelectorAll(".letter-cell");
-  if (currentLetterIndex >= cells.length) return;
+  const cells = document.querySelectorAll(".letter-cell:not(.hyphen-cell)");
+  if (cells.length === 0) return;
+
+  // ➜ Neue Logik: Falls aktueller Index bereits "correct" oder "revealed", weitergehen
+  while (
+    currentLetterIndex < cells.length &&
+    (cells[currentLetterIndex].classList.contains("correct") ||
+      cells[currentLetterIndex].classList.contains("revealed"))
+  ) {
+    currentLetterIndex++;
+  }
+
+  // Wenn alle Buchstaben schon aufgedeckt sind
+  if (currentLetterIndex >= cells.length) {
+    completeMovie();
+    return;
+  }
 
   const cell = cells[currentLetterIndex];
   const correct = cell.dataset.letter;
@@ -225,4 +272,111 @@ function restartGame() {
   document.getElementById("gameArea").style.display = "block";
   document.getElementById("gameOver").classList.remove("show");
   loadMovie(0);
+}
+
+/* --- Responsive grid system --- */
+window.addEventListener("resize", () => {
+  // Recreate answer cells when window resizes to adjust slot count
+  if (currentMovieIndex < movies.length) {
+    const movie = movies[currentMovieIndex];
+    createAnswerCells(movie.answer);
+  }
+});
+
+/* --- Hint handling --- */
+function handleHint(index) {
+  if (outOfLives || inputLocked) return;
+
+  // Wenn kein Leben mehr, keine Hints möglich
+  if (lives <= 0) return;
+
+  // Herz verlieren
+  loseHeart();
+
+  // Wenn jetzt nur noch 1 Herz übrig ist, alle Hints deaktivieren
+  if (lives === 1) {
+    disableAllHints();
+  }
+
+  // Logik je nach Hint-Taste
+  switch (index) {
+    case 0:
+      showHintMessage(
+        "🎭 Hinweis 1: Denk an den ursprünglichen Film – sein Gegenteil könnte witzig sein!"
+      );
+      break;
+    case 1:
+      showHintMessage(
+        "ℹ️ Hinweis 2: Vielleicht hilft dir der Anfangsbuchstabe des Films?"
+      );
+      break;
+    case 2:
+      showHintMessage(
+        "📜 Hinweis 3: Lies den Flip-Titel – er verrät oft das Gegenteil vom echten!"
+      );
+      break;
+    case 3:
+      revealThreeLetters();
+      break;
+  }
+}
+
+/* --- Nachricht anzeigen --- */
+function showHintMessage(text) {
+  alert(text); // Du kannst das später durch eine hübsche Overlay-Nachricht ersetzen
+}
+
+/* --- Deaktiviert alle Hint-Tasten --- */
+function disableAllHints() {
+  const hintKeys = document.querySelectorAll(".hint-key");
+  hintKeys.forEach((key) => {
+    key.classList.add("disabled");
+    key.removeEventListener("click", handleHint);
+    key.style.pointerEvents = "none";
+    key.style.opacity = "0.5";
+  });
+}
+
+/* --- Deaktiviert nur die vierte Hint-Taste --- */
+function disableFourthHint() {
+  const hintKeys = document.querySelectorAll(".hint-key");
+  if (hintKeys[3]) {
+    hintKeys[3].classList.add("disabled");
+    hintKeys[3].style.pointerEvents = "none";
+    hintKeys[3].style.opacity = "0.5";
+  }
+}
+
+/* --- Deckt drei zufällige noch nicht aufgedeckte Buchstaben auf --- */
+function revealThreeLetters() {
+  const cells = Array.from(document.querySelectorAll(".letter-cell")).filter(
+    (c) =>
+      !c.classList.contains("correct") &&
+      !c.textContent &&
+      !c.classList.contains("space-cell")
+  );
+
+  if (cells.length === 0) {
+    disableFourthHint();
+    return;
+  }
+
+  const toReveal = Math.min(3, cells.length);
+  const randomCells = [];
+
+  while (randomCells.length < toReveal) {
+    const r = Math.floor(Math.random() * cells.length);
+    const cell = cells.splice(r, 1)[0];
+    randomCells.push(cell);
+  }
+
+  randomCells.forEach((cell) => {
+    cell.textContent = cell.dataset.letter;
+    cell.classList.add("correct");
+  });
+
+  // Wenn weniger als 3 aufgedeckt wurden, Taste deaktivieren
+  if (toReveal < 3) {
+    disableFourthHint();
+  }
 }
